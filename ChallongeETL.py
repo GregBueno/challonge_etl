@@ -1,3 +1,9 @@
+'''
+Author: Gregory Bueno
+Email: gregorybueno@hotmail.com
+Date: 26-10-2019
+'''
+
 import re
 import json
 import requests
