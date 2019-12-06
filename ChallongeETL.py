@@ -10,6 +10,7 @@ import requests
 import pandas as pd
 from bs4 import BeautifulSoup
 from pandas.io.json import json_normalize
+from urllib.request import urlopen, Request
 
 def parse_challonge(url):
     """
@@ -25,8 +26,11 @@ def parse_challonge(url):
     # Tournament
     tournament = url.split('/')[-1]
 
-    r = requests.get(url)
-    soup = BeautifulSoup(r.text, 'html.parser')
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.3'}
+    req = Request(url=url, headers=headers) 
+    html = urlopen(req).read() 
+
+    soup = BeautifulSoup(html, 'html.parser')
     info = soup.find("div",{"class":"details"})
 
     title_tour = info.find("div",{"class":"tournament-banner-header"})
@@ -48,10 +52,12 @@ def parse_challonge(url):
 
     # Matches
 
-    r = requests.get(url+'/module')
-    soup = BeautifulSoup(r.text, 'html.parser')
+    req = Request(url=url+'/module', headers=headers) 
+    html = urlopen(req).read()
+
+    soup = BeautifulSoup(html, 'html.parser')
     scripts = soup.find_all("script")
-    texthtml = scripts[6].get_text()
+    texthtml = scripts[7].get_text()
 
     pattern = r"(?<=\'TournamentStore\'] = )(.*)(?=; window)"
     pattern = r"(?<=\'TournamentStore\'] = )(.*)(?=; window._initialStoreState(.*)Theme)"
@@ -79,19 +85,22 @@ def parse_challonge(url):
 
     df_match_final = df_match_final.drop('scores',axis=1)
 
-    df_match_final['score1'] = df_match_final['score1'].fillna(0)
-    df_match_final['score1'] = df_match_final['score1'].astype(int)
+    df_match_final['pts1'] = df_match_final['score1'].fillna(0)
+    df_match_final['pts1'] = df_match_final['pts1'].astype(int)
 
-    df_match_final['score2'] = df_match_final['score2'].fillna(0)
-    df_match_final['score2'] = df_match_final['score2'].astype(int)
+    df_match_final['pts2'] = df_match_final['score2'].fillna(0)
+    df_match_final['pts2'] = df_match_final['pts2'].astype(int)
+    
+    df_match_final['score1'] = df_match_final['pts1'] - df_match_final['pts2']
+    df_match_final['score2'] = df_match_final['pts2'] - df_match_final['pts1']
 
-    dfp1 = df_match_final[['player1.id','player1.display_name','round','state','tournament_id','id','winner_id','score1']]
-    dfp2 = df_match_final[['player2.id','player2.display_name','round','state','tournament_id','id','winner_id','score2']]
+    dfp1 = df_match_final[['player1.id','player1.display_name','round','state','tournament_id','id','winner_id','score1','pts1']]
+    dfp2 = df_match_final[['player2.id','player2.display_name','round','state','tournament_id','id','winner_id','score2','pts2']]
 
-    dfp1 = dfp1.rename(columns={'player1.id':'player_id','player1.display_name':'player_name','score1':'score','id':'match_id'})
+    dfp1 = dfp1.rename(columns={'player1.id':'player_id','player1.display_name':'player_name','score1':'diff_score','id':'match_id','pts1':'total_score'})
     dfp1.loc[dfp1.player_id == dfp1.winner_id,'winner'] = True
 
-    dfp2 = dfp2.rename(columns={'player2.id':'player_id','player2.display_name':'player_name','score2':'score','id':'match_id'})
+    dfp2 = dfp2.rename(columns={'player2.id':'player_id','player2.display_name':'player_name','score2':'diff_score','id':'match_id','pts2':'total_score'})
     dfp2.loc[dfp2.player_id == dfp2.winner_id,'winner'] = True
 
     dfp = pd.concat([dfp1,dfp2])
@@ -105,5 +114,5 @@ def parse_challonge(url):
 
     dfp = dfp.merge(df_tour,on=['joincol'],how='left')
     dfp = dfp.drop('joincol',axis=1)
-    
+
     return dfp
